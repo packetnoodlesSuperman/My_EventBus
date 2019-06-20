@@ -2,7 +2,6 @@ package com.bob.bus.eventbus;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,10 +16,18 @@ public class SubscriberMethodFinder {
     private static final int SYNTHETIC = 0x1000;
     private static final int MODIFIERS_IGNORE = Modifier.ABSTRACT | Modifier.STATIC | BRIDGE | SYNTHETIC;
 
+    private final boolean ignoreGenerateIndex;
+
+    public SubscriberMethodFinder(boolean ignoreGenerateIndex) {
+        this.ignoreGenerateIndex = ignoreGenerateIndex;
+    }
+
+
 
     //缓存
     private static final Map<Class<?>, List<SubscriberMethod>> METHOD_CACHE
             = new ConcurrentHashMap<>();
+
 
     List<SubscriberMethod> findSubscriberMethods(Class<?> subscriberClass) {
         List<SubscriberMethod> subscriberMethods = METHOD_CACHE.get(subscriberClass);
@@ -28,11 +35,29 @@ public class SubscriberMethodFinder {
             return subscriberMethods;
         }
         //不在缓存 继续走
-
-        subscriberMethods = findUsingReflection(subscriberClass);
+        if (ignoreGenerateIndex) {
+            //
+            subscriberMethods = findUsingReflection(subscriberClass);
+        } else {
+            subscriberMethods = findUsingInfo(subscriberClass);
+        }
 
         return null;
     }
+
+    private List<SubscriberMethod> findUsingInfo(Class<?> subscriberClass) {
+        FindState findState = prepareFindState();
+        findState.initForSubscriber(subscriberClass);
+
+        while (findState.clazz != null) {
+
+
+        }
+
+        return null;
+    }
+
+
 
     private List<SubscriberMethod> findUsingReflection(Class<?> subscriberClass) {
         FindState findState = prepareFindState();

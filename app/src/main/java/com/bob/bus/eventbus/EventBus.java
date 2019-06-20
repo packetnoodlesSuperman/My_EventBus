@@ -112,7 +112,7 @@ public class EventBus {
     EventBus(EventBusBuilder builder) {
         subscriberMethodFinder = new SubscriberMethodFinder(
 
-        );
+                true);
         subscriptionsByEventType = new HashMap<>();
         typesBySubscriber = new HashMap<>();
         stickyEvents = new ConcurrentHashMap<>();
