@@ -21,7 +21,7 @@ public class SubscriberMethod {
     String methodString;
 
 
-    public SubscriberMethod(Method method, ThreadMode threadMode, Class<?> eventType, int priority, boolean sticky) {
+    public SubscriberMethod(Method method, Class<?> eventType, ThreadMode threadMode, int priority, boolean sticky) {
         this.method = method;
         this.threadMode = threadMode;
         this.eventType = eventType;

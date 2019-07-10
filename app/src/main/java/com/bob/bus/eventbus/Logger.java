@@ -19,6 +19,10 @@ public interface Logger {
         public void log(Level level, String msg, Throwable throwable) {
 
         }
+
+        public static boolean isAndroidLogAvailable() {
+            return false;
+        }
     }
 
 }

@@ -38,6 +38,53 @@ import java.util.concurrent.ExecutorService;
  */
 public class EventBus {
 
+    //线程相关联-->本地数据
+    private final ThreadLocal<PostingThreadState> currentPostingThreadState =
+            new ThreadLocal<PostingThreadState>() {
+                @Override
+                protected PostingThreadState initialValue() {
+                    return new PostingThreadState();
+                }
+            };
+
+    //EventBus配置类
+    private static final EventBusBuilder DEFAULT_BUILDER = new EventBusBuilder();
+    //主线程 MainHandler支撑相关
+    private final MainThreadSupport mainThreadSupport;
+    //缓存
+    private static final Map<Class<?>, List<Class<?>>> eventTypesCache = new HashMap<>();
+    //这里的Class<?> 为订阅事件的类型 也就是EventType类型
+    private final Map<Class<?>, CopyOnWriteArrayList<Subscription>> subscriptionsByEventType;
+    private final Map<Object, List<Class<?>>> typesBySubscriber;
+    private final Map<Class<?>, Object> stickyEvents;
+    private final SubscriberMethodFinder subscriberMethodFinder;
+    private final Poster mainThreadPoster;
+    private final BackgroundPoster backgroundPoster;
+    private final AsyncPoster asyncPoster;
+    private final SubscriberMethodFinder subscriberMethodFinder;
+    private final ExecutorService executorService;
+    private final boolean throwSubscriberException;
+    private final boolean logSubscriberExceptions;
+    private final boolean logNoSubscriberMessages;
+    private final boolean sendSubscriberExceptionEvent;
+    private final boolean sendNoSubscriberEvent;
+    private final boolean eventInheritance;
+    private final int indexCount;
+
+    //构造方法
+    public EventBus() {
+        this(DEFAULT_BUILDER);
+    }
+
+    EventBus(EventBusBuilder builder) {
+        subscriptionsByEventType = new HashMap<>();
+        subscriberMethodFinder = new SubscriberMethodFinder(builder.subscriberInfoIndexes, builder.strictMethodVerification, builder.ignoreGeneratedIndex);
+        typesBySubscriber = new HashMap<>();
+        stickyEvents = new ConcurrentHashMap<>();
+    }
+
+
+
     /**
      * @Desc 单例
      */
@@ -120,41 +167,78 @@ public class EventBus {
     }
 
     public void post(Object event) {
+        PostingThreadState postingThreadState = currentPostingThreadState.get();
 
+        List<Object> eventQueue = postingThreadState.eventQueue;
+        eventQueue.add(event);
+
+        if (!postingThreadState.isPosting) {
+            //设置是否为主线程 通过MainThreadSupport 辅助类 得到
+            postingThreadState.isMainThread = isMainThread();
+            //正在提交 任务
+            postingThreadState.isPosting = true;
+            if (postingThreadState.canceled) {
+                throw new EventBusException("");
+            }
+
+            try {
+                while (!eventQueue.isEmpty()) {
+                    postSingleEvent(eventQueue.remove(0), postingThreadState);
+                }
+            }finally {
+                postingThreadState.isPosting = false;
+                postingThreadState.isMainThread = false;
+            }
+
+        }
     }
 
-
-    //这里的Class<?> 为订阅事件的类型 也就是EventType类型
-    private final Map<Class<?>, CopyOnWriteArrayList<Subscription>> subscriptionsByEventType;
-    private final Map<Object, List<Class<?>>> typesBySubscriber;
-    private final Map<Class<?>, Object> stickyEvents;
-
-    private final SubscriberMethodFinder subscriberMethodFinder;
-    private static final EventBusBuilder DEFAULT_BUILDER = new EventBusBuilder();
-    //构造方法
-    public EventBus() {
-        this(DEFAULT_BUILDER);
+    private boolean isMainThread() {
+        return mainThreadSupport != null ? mainThreadSupport.isMainThread() : true;
     }
 
-    EventBus(EventBusBuilder builder) {
-        subscriberMethodFinder = new SubscriberMethodFinder(
-
-                true);
-        subscriptionsByEventType = new HashMap<>();
-        typesBySubscriber = new HashMap<>();
-        stickyEvents = new ConcurrentHashMap<>();
-    }
 
     /******************** 订阅事件处理 ********************/
     private void postSingleEvent(Object event, PostingThreadState postingState) {
+        //事件类型
         Class<?> eventClass = event.getClass();
+        //
         boolean subscriptionFound = false;
+        if (eventInheritance) {
 
-        postSingleEventForEventType(event, postingState, eventClass);
+        } else {
+            postSingleEventForEventType(event, postingState, eventClass);
+        }
 
     }
 
-    private void postSingleEventForEventType(Object event, PostingThreadState postingState, Class<?> eventClass) {
+    private boolean postSingleEventForEventType(Object event, PostingThreadState postingState, Class<?> eventClass) {
+        CopyOnWriteArrayList<Subscription> subscriptions;
+        synchronized (this) {
+            subscriptions = subscriptionsByEventType.get(eventClass);
+        }
+        if (subscriptions != null && !subscriptions.isEmpty()) {
+            for (Subscription subscription : subscriptions) {
+
+                postingState.event = event;
+                postingState.subscription = subscription;
+                boolean aborted = false;
+                try {
+                    postToSubscription(subscription, event, postingState.isMainThread);
+                    aborted = postingState.canceled;
+                } finally {
+                    postingState.event = null;
+                    postingState.subscription = null;
+                    postingState.canceled = false;
+                }
+
+                if (aborted) {
+                    break;
+                }
+            }
+            return true;
+        }
+        return false;
 
     }
 
@@ -164,7 +248,8 @@ public class EventBus {
                 if (isMainThread) {
                     invokeSubscriber(subscription, event);
                 }
-
+            case POSTING:
+                invokeSubscriber(subscription, event);
                 break;
         }
     }
@@ -191,10 +276,16 @@ public class EventBus {
 
 
     /**
-     * @desc 内部类
+     * @desc 内部类 记录线程状态
      */
     final static class PostingThreadState {
-
+        //Object 订阅事件对象 就是订阅方法中的参数对象
+        final List<Object> eventQueue = new ArrayList<>();
+        boolean isPosting;
+        boolean isMainThread;
+        Subscription subscription;
+        Object event;
+        boolean canceled;
     }
 
 }
