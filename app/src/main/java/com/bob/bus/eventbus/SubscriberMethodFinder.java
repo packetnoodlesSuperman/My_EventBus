@@ -208,6 +208,9 @@ public class SubscriberMethodFinder {
             }
         }
 
+        /**
+         * TODO
+         */
         private boolean checkAddWithMethodSignature(Method method, Class<?> eventType) {
             methodKeyBuilder.setLength(0);
             methodKeyBuilder.append(method.getName());

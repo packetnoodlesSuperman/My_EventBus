@@ -1,8 +1,7 @@
 package com.bob.bus.eventbus;
 
 /**
- * Created by xhb on 2019/6/19.
+ * @Desc 配置类
  */
-
 public class EventBusBuilder {
 }
