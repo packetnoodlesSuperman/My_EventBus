@@ -21,7 +21,7 @@ public class SubscriberMethodFinder {
     private static final int SYNTHETIC = 0x1000;
     private static final int MODIFIERS_IGNORE = Modifier.ABSTRACT | Modifier.STATIC | BRIDGE | SYNTHETIC;
 
-    //是否忽略索引策略
+    //是否忽略索引策略 默认不忽略
     private final boolean ignoreGeneratedIndex;
 
     //缓存 Class<?> --> 注册的class类  映射多个 被@Subscribe修饰的方法（List<SubscriberMethod>）
@@ -32,6 +32,8 @@ public class SubscriberMethodFinder {
     private static final FindState[] FIND_STATE_POOL = new FindState[POOL_SIZE];
 
     private final boolean strictMethodVerification;
+
+    private List<SubscriberInfoIndex> subscriberInfoIndexes;
 
     /**
      * @Desc 构造函数
@@ -60,6 +62,7 @@ public class SubscriberMethodFinder {
             //反射获取
             subscriberMethods = findUsingReflection(subscriberClass);
         } else {
+            //默认获取index apt策略
             subscriberMethods = findUsingInfo(subscriberClass);
         }
 
@@ -67,7 +70,44 @@ public class SubscriberMethodFinder {
     }
 
     private List<SubscriberMethod> findUsingInfo(Class<?> subscriberClass) {
+        FindState findState = prepareFindState();
+        findState.initForSubscriber(subscriberClass);
+        while (findState.clazz != null) {
+            findState.subscriberInfo = getSubscriberInfo(findState);
+            if (findState.subscriberInfo != null) {
+                SubscriberMethod[] array = findState.subscriberInfo.getSubscriberMethods();
+                for (SubscriberMethod subscriberMethod : array) {
+                    if (findState.checkAdd(subscriberMethod.method, subscriberMethod.eventType)) {
+                        findState.subscriberMethods.add(subscriberMethod);
+                    }
+                }
+            } else {
+                findUsingReflectionInSingleClass(findState);
+            }
+            findState.moveToSuperclass();
+        }
+        return getMethodsAndRelease(findState);
+    }
 
+    /**
+     * @Desc 获取订阅信息
+     */
+    private SubscriberInfo getSubscriberInfo(FindState findState) {
+        if (findState.subscriberInfo != null && findState.subscriberInfo.getSuperSubscriberInfo() != null) {
+            SubscriberInfo superSubscriberInfo = findState.subscriberInfo.getSuperSubscriberInfo();
+            if (findState.clazz == superSubscriberInfo.getSubscriberClass()) {
+                return superSubscriberInfo;
+            }
+        }
+        if (subscriberInfoIndexes != null) {
+            for (SubscriberInfoIndex index : subscriberInfoIndexes) {
+                SubscriberInfo info = index.getSubscriberInfo(findState.clazz);
+                if (info != null) {
+                    return info;
+                }
+            }
+        }
+        return null;
     }
 
     /**

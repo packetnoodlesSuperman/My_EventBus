@@ -4,10 +4,11 @@ import java.util.logging.Level;
 
 public interface Logger {
 
+    //输出日志
     void log(Level level, String msg);
     void log(Level level, String msg, Throwable throwable);
 
-
+    //Android日志
     public static class AndroidLogger implements Logger {
 
         @Override

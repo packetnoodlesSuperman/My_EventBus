@@ -6,12 +6,16 @@ package com.bob.bus.eventbus;
 
 public interface SubscriberInfo {
 
+    //获取订阅者的Class
     Class<?> getSubscriberClass();
 
+    //订阅方法
     SubscriberMethod[] getSubscriberMethods();
 
+    //订阅者的Class的父类的SubscriberInfo
     SubscriberInfo getSuperSubscriberInfo();
 
+    //是否解析父类的状态
     boolean shouldCheckSuperclass();
 
 }

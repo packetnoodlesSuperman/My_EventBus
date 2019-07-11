@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -53,8 +54,9 @@ public class EventBus {
     private final MainThreadSupport mainThreadSupport;
     //缓存
     private static final Map<Class<?>, List<Class<?>>> eventTypesCache = new HashMap<>();
-    //这里的Class<?> 为订阅事件的类型 也就是EventType类型
+    //这里的Class<?> 为订阅事件的类型 也就是EventType类型  Subscription是订阅者 与 订阅方法的封装
     private final Map<Class<?>, CopyOnWriteArrayList<Subscription>> subscriptionsByEventType;
+    //为一个订阅者 映射很多订阅事件 List<Class<?>>  其实就是 List<Event.class>
     private final Map<Object, List<Class<?>>> typesBySubscriber;
     private final Map<Class<?>, Object> stickyEvents;
     private final SubscriberMethodFinder subscriberMethodFinder;
@@ -72,17 +74,16 @@ public class EventBus {
     private final int indexCount;
 
     //构造方法
-    public EventBus() {
-        this(DEFAULT_BUILDER);
-    }
-
+    public EventBus() { this(DEFAULT_BUILDER); }
     EventBus(EventBusBuilder builder) {
         subscriptionsByEventType = new HashMap<>();
-        subscriberMethodFinder = new SubscriberMethodFinder(builder.subscriberInfoIndexes, builder.strictMethodVerification, builder.ignoreGeneratedIndex);
+        subscriberMethodFinder = new SubscriberMethodFinder(
+                builder.subscriberInfoIndexes,
+                builder.strictMethodVerification,
+                builder.ignoreGeneratedIndex);
         typesBySubscriber = new HashMap<>();
         stickyEvents = new ConcurrentHashMap<>();
     }
-
 
 
     /**
@@ -104,22 +105,25 @@ public class EventBus {
     public void register(Object subscriber) {
         //获取该对象的Class
         Class<?> subscriberClass = subscriber.getClass();
-        /** 寻找Class类总所有被@Subscribe修饰的方法 并解析成{@link SubscribeMethod} **/
+        /** 寻找Class类以及父类所有被@Subscribe修饰的方法 并解析成{@link SubscribeMethod} **/
+        //拿到该订阅者以及父类所有被@Subscribe修饰的方法
         List<SubscriberMethod> subscriberMethods = subscriberMethodFinder.findSubscriberMethods(subscriberClass);
         //this因为是单例
         synchronized (this) {
+            //遍历 该订阅者以及父类所有被@Subscribe修饰的方法集合
             for (SubscriberMethod subscriberMethod : subscriberMethods) {
                 subscribe(subscriber, subscriberMethod);
             }
         }
-
     }
 
     /**
      * @desc 订阅
      */
     private void subscribe(Object subscriber, SubscriberMethod subscriberMethod) {
+        //方法内参数的事件类型
         Class<?> eventType = subscriberMethod.eventType;
+        //订阅者 与 订阅方法 封装成Subscription
         Subscription newSubscription = new Subscription(subscriber, subscriberMethod);
 
         //一个事件 会映射 很多订阅方法
@@ -129,11 +133,9 @@ public class EventBus {
             subscriptionsByEventType.put(eventType, subscriptions);
         } else {
             if (subscriptions.contains(newSubscription)) {
-                //抛异常
-
-
+                //抛异常 重复注册抛异常
+                throw new EventBusException("Subscriber " + subscriber.getClass() + " already registered to event " + eventType);
             }
-
         }
 
         //优先级排列
@@ -158,13 +160,35 @@ public class EventBus {
         //判断粘性事件
         if (subscriberMethod.sticky) {
             //如果是粘性 则开始执行订阅方法
+            if (eventInheritance) {
+                //找到事件的所有父类和所有实现的接口
+                Set<Map.Entry<Class<?>, Object>> entries = stickyEvents.entrySet();
+                for (Map.Entry<Class<?>, Object>  entry : entries) {
+                    Class<?> candidateEventType = entry.getKey();
+                    /**
+                     * isAssignableFrom 判断是否为某个类的父类
+                     *
+                     * isAssignableFrom()方法是从类继承的角度去判断
+                     * instanceof关键字是从实例继承的角度去判断。
+                     */
+                    if (eventType.isAssignableFrom(candidateEventType)) {
+                        Object stickyEvent = entry.getValue();
+                        checkPostStickyEventToSubscription(newSubscription, stickyEvent);
+                    }
+                }
 
-
-            //在postSticky的时候 stickyEvents会添加黏性事件
-            Object stickyEvent = stickyEvents.get(eventType);
-            //checkPostStickyEventToSubscription(newSubscription, stickyEvent);
+            } else {
+                //在postSticky的时候 stickyEvents会添加黏性事件
+                Object stickyEvent = stickyEvents.get(eventType);
+                checkPostStickyEventToSubscription(newSubscription, stickyEvent);
+            }
         }
     }
+
+    private void checkPostStickyEventToSubscription(Subscription newSubscription, Object stickyEvent) {
+
+    }
+
 
     public void post(Object event) {
         PostingThreadState postingThreadState = currentPostingThreadState.get();
@@ -189,10 +213,12 @@ public class EventBus {
                 postingThreadState.isPosting = false;
                 postingThreadState.isMainThread = false;
             }
-
         }
     }
 
+    /**
+     * @return 是否在主线程
+     */
     private boolean isMainThread() {
         return mainThreadSupport != null ? mainThreadSupport.isMainThread() : true;
     }
@@ -287,5 +313,4 @@ public class EventBus {
         Object event;
         boolean canceled;
     }
-
 }
