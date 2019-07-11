@@ -17,4 +17,11 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
     }
+
+    public static void main(String[] args) {
+        String index = "org.greenrobot.eventbusperf.MyEventBusIndex";
+        int i = index.lastIndexOf(46);
+        System.out.print(i+"");
+
+    }
 }

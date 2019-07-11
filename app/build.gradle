@@ -31,7 +31,11 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+
+
+
     implementation 'org.greenrobot:eventbus:3.1.1'
-    annotationProcessor 'org.greenrobot:eventbus-annotation-processor:3.1.1'
-    implementation files('libs/eventbus-annotation-processor-3.1.1.jar')
+    //annotationProcessor 'org.greenrobot:eventbus-annotation-processor:3.1.1'
+    //implementation files('libs/eventbus-annotation-processor-3.1.1.jar')
+    //implementation "de.greenrobot:java-common:2.3.1"
 }
